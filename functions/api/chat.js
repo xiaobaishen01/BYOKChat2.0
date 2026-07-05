@@ -25,6 +25,21 @@ export async function onRequestPost(context) {
     }
     const reqBody = await request.text();
     const upstreamUrl = (base + "/chat/completions");
-    const upstream = await fetch(upstreamUrl, { method: "POST", body: reqBody });
-    return new Response(upstream.body, { status: upstream.status });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+        const upstream = await fetch(upstreamUrl, { 
+            method: "POST", 
+            body: reqBody,
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return new Response(upstream.body, { status: upstream.status });
+    } catch (e) {
+        clearTimeout(timeoutId);
+        if (e instanceof Error && e.name === 'AbortError') {
+            return new Response("{\"error\": \"Gateway Timeout (Upstream API did not respond within 15 seconds)\"}", { status: 504 });
+        }
+        return new Response("{\"error\": \"Bad Gateway (Failed to fetch from upstream API)\"}", { status: 502 });
+    }
 }
